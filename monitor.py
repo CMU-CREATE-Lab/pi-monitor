@@ -8,7 +8,7 @@ def measure_temperature():
     return float(output[5:-3])
 
 
-def uptime():
+def load_average():
     output = subprocess.check_output(['uptime'], encoding='utf8')
     tokens = output.split()
     return {
@@ -64,6 +64,47 @@ def SDcard():
     "Percent used": float(tokens[4].replace("%",""))
     }
 
+def throttled():
+
+    GET_THROTTLED_CMD = 'vcgencmd get_throttled'
+    MESSAGES = {
+        0: 'Under-voltage',
+        1: 'ARM frequency capped',
+        2: 'Currently throttled',
+        3: 'Soft temperature limit active',
+        16: 'Under-voltage has occurred since last reboot',
+        17: 'Throttling has occurred since last reboot',
+        18: 'ARM frequency capped has occurred since last reboot',
+        19: 'Soft temperature limit has occurred'
+    }
+
+    print("Checking for throttling issues since last reboot...")
+
+    throttled_output = subprocess.check_output(GET_THROTTLED_CMD, shell=True, encoding='utf8')
+    throttled_binary = bin(int(throttled_output.split('=')[1], 0))
+
+    warnings = 0
+    all = {}
+    for position, message in MESSAGES.items():
+        # Check for the binary digits to be "on" for each warning message
+        if len(throttled_binary) > position and throttled_binary[0 - position - 1] == '1':
+            all[message] = True
+        else:
+            all[message] = False
+
+    return all
+
+def CPU_clock_rate():
+    text_file = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+    data = text_file.read()
+    text_file.close()
+    return float(data)
+
+def uptime():
+    output = subprocess.check_output(['uptime'], encoding='utf8')
+    tokens = output.split()
+    return tokens[2]
+
 def allStats():
     return {
         "SDcard": SDcard(),
@@ -71,7 +112,9 @@ def allStats():
         "processor_frequencey": processor_frequencey(), 
         "processor_utilization": processor_utilization(), 
         "uptime": uptime(), 
-        "measure_temperature": measure_temperature()
+        "measure_temperature": measure_temperature(),
+        "throttled": throttled(), 
+        "load_average": load_average()
     }
 stats = allStats()
 details = json.dumps(stats)
@@ -85,43 +128,11 @@ if stats["SDcard"]["Percent used"] < 95:
 else:
     Stat.down("SD card almost full", valid_for_secs= 600, details=details, payload=stats)
 
-    #cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq
-def CPU_clock_rate():
-     text_file = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-     data = text_file.read()
-     text_file.close()
-     return float(data)
+import sys
+if "--reboot" in sys.argv:
+    Stat.warning("system rebooted")
 
-GET_THROTTLED_CMD = 'vcgencmd get_throttled'
-MESSAGES = {
-    0: 'Under-voltage!',
-    1: 'ARM frequency capped!',
-    2: 'Currently throttled!',
-    3: 'Soft temperature limit active',
-    16: 'Under-voltage has occurred since last reboot.',
-    17: 'Throttling has occurred since last reboot.',
-    18: 'ARM frequency capped has occurred since last reboot.',
-    19: 'Soft temperature limit has occurred'
-}
-
-print("Checking for throttling issues since last reboot...")
-
-throttled_output = subprocess.check_output(GET_THROTTLED_CMD, shell=True, encoding='utf8')
-throttled_binary = bin(int(throttled_output.split('=')[1], 0))
-
-warnings = 0
-for position, message in MESSAGES.items():
-    # Check for the binary digits to be "on" for each warning message
-    if len(throttled_binary) > position and throttled_binary[0 - position - 1] == '1':
-        print(message)
-        warnings += 1
-
-if warnings == 0:
-    print("Looking good!")
-else:
-    print("Houston, we may have a problem!")
-
-# print(measure_temperature())
+# print(measure_temperature())The
 # print(uptime())
 # print(processor_utilization())
 # print(processor_frequencey())
