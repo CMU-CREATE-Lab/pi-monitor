@@ -103,7 +103,28 @@ def CPU_clock_rate():
 def uptime():
     output = subprocess.check_output(['uptime'], encoding='utf8')
     tokens = output.split()
-    return tokens[2]
+    return {
+        "hours": float(tokens[0])/3600
+    }   
+
+def Timedatectl():
+    output = subprocess.check_output(['timedatectl', 'show'], encoding='utf8')
+    output += subprocess.check_output(['timedatectl', 'show-timesync'], encoding='utf8')
+    lines = output.split('\n')
+    # Build a dictionary from a=b from lines
+    ret = {}
+    for line in lines:
+        if line:
+            [key, value] = line.split('=', 1)
+            ret[key] = value
+    return ret
+
+import glob
+
+def backlog_image_count():
+    backlog_image_filenames = glob.glob("/home/breathecam/breathecam/Code/pi_cam/images/*.jpg")
+    backlog_image_count = len(backlog_image_filenames)
+    return backlog_image_count
 
 def allStats():
     return {
@@ -114,7 +135,10 @@ def allStats():
         "uptime": uptime(), 
         "measure_temperature": measure_temperature(),
         "throttled": throttled(), 
-        "load_average": load_average()
+        "load_average": load_average(),
+        "Timedatectl": Timedatectl(),
+        "backlog_image_count": backlog_image_count(), 
+        "uptime": uptime()
     }
 stats = allStats()
 details = json.dumps(stats)
@@ -128,9 +152,24 @@ if stats["SDcard"]["Percent used"] < 95:
 else:
     Stat.down("SD card almost full", valid_for_secs= 600, details=details, payload=stats)
 
+def wait_for_timesync():
+    # Wait until the system clock is synchronized, and return how long it took
+    waited_secs = 0
+    while not os.path.exists("/run/systemd/timesync/synchronized"):
+        print("waiting for time sync")
+        time.sleep(1.0)
+        waited_secs += 1
+    return waited_secs
+
 import sys
 if "--reboot" in sys.argv:
-    Stat.warning("system rebooted")
+    waited_secs = wait_for_timesync()
+    Stat.warning(f"System booted.  Took {waited_secs} seconds for NTP to synchronize")
+
+def timedatectl():
+    output = subprocess.check_output(['timedatectl', 'timesync-status'], encoding='utf8')
+    tokens = output()
+    return tokens
 
 # print(measure_temperature())The
 # print(uptime())
