@@ -101,7 +101,7 @@ def CPU_clock_rate():
     return float(data)
 
 def uptime():
-    output = subprocess.check_output(['uptime'], encoding='utf8')
+    output = subprocess.check_output(['cat', '/proc/uptime'], encoding='utf8')
     tokens = output.split()
     return {
         "hours": float(tokens[0])/3600
