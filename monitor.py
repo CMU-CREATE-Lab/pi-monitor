@@ -147,10 +147,20 @@ from utils.utils import *
 
 Stat.set_service('RPi status')
 
-if stats["SDcard"]["Percent used"] < 95:
-    Stat.up("System is working", valid_for_secs = 600, details=details, payload=stats)
+errors = []
+
+if stats["SDcard"]["Percent used"] >= 95:
+    errors.append(f'SD card almost full (${stats["SDcard"]["Percent used"]}%)')
+
+backlog_image_count_threshold = 50
+if stats["backlog_image_count"] > backlog_image_count_threshold:
+    errors.append(f'${stats["backlog_image_count"]} images in upload backlog (>${backlog_image_count_threshold})')
+
+if errors:
+    Stat.down(", ".join(errors), valid_for_secs= 600, details=details, payload=stats)
 else:
-    Stat.down("SD card almost full", valid_for_secs= 600, details=details, payload=stats)
+    Stat.up("System is working", valid_for_secs = 600, details=details, payload=stats)
+
 
 def wait_for_timesync():
     # Wait until the system clock is synchronized, and return how long it took
