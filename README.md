@@ -29,6 +29,10 @@ Install a recent version of python3 (>=3.6)
     # Run monitor.py upon reboot
     @reboot /usr/bin/python3 $HOME/pi-monitor/monitor.py --reboot
 
+# Update to new version remotely via ssh
+
+    ssh <hostname> "cd pi-monitor && git pull && git submodule update"
+
 # Reported data
 
 Here's an example of reported data:
