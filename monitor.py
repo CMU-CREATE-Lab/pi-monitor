@@ -36,19 +36,16 @@ def cpuFreqGhz():
 import os
 def getRAMinfo():
     p = os.popen('free')
-    i = 0
-    while 1:
-        i = i + 1
-        line = p.readline()
-        if i==2:
-            tokens = line.split()
-            used = float(tokens[2])
-            total = float(tokens[1])
+    p.readline() # skip header
+    line = p.readline()
+    tokens = line.split()
+    used = float(tokens[2])
+    total = float(tokens[1])
 
-            return {
-                "PctUsed": round(used / total * 100, 1),
-                "TotalGB": round(total / 1e6, 2)
-            }
+    return {
+        "PctUsed": round(used / total * 100, 1),
+        "TotalGB": round(total / 1e6, 2)
+    }
 
 # 
 def SDcard():
