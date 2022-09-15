@@ -8,7 +8,7 @@ def gpuTempC():
     return float(subprocess.check_output(['/usr/bin/vcgencmd', 'measure_temp'])[5:-3])
 
 def cpuTempC():
-    return round(float(open("/sys/class/thermal/thermal_zone0/temp").read()) / 1000, 2)
+    return round(float(open("/sys/class/thermal/thermal_zone0/temp").read()) / 1000, 1)
 
 def load_average():
     output = subprocess.check_output(['uptime'], encoding='utf8')
