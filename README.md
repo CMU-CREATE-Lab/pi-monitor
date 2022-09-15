@@ -20,7 +20,7 @@ Clone into your homedir, and install.  Okay to do this either as a standard user
 
 # Update to new version remotely via ssh
 
-    ssh <hostname> "cd pi-monitor && git pull && git submodule update && ./install.py"
+    ssh <hostname> pi-monitor/update.py
 
 # Reported data
 
