@@ -119,9 +119,9 @@ def backlog_image_count():
 def allStats():
     return {
         "ImageBacklogCnt": backlog_image_count(), 
+        "UptimeHrs": uptimeHrs(), 
         "CpuTempC": cpuTempC(),
         "GpuTempC": gpuTempC(),
-        "UptimeHrs": uptimeHrs(), 
         "SDcard": SDcard(),
         "RAM": getRAMinfo(), 
         "LoadAvg": load_average(),
