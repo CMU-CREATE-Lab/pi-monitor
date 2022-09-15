@@ -3,18 +3,20 @@ import statistics
 import subprocess
 
 
-def measure_temperature():
-    output = subprocess.check_output(['/usr/bin/vcgencmd', 'measure_temp'])
-    return float(output[5:-3])
 
+def gpuTempC():
+    return float(subprocess.check_output(['/usr/bin/vcgencmd', 'measure_temp'])[5:-3])
+
+def cpuTempC():
+    return round(float(open("/sys/class/thermal/thermal_zone0/temp").read()) / 1000, 2)
 
 def load_average():
     output = subprocess.check_output(['uptime'], encoding='utf8')
     tokens = output.split()
     return {
-        "load average 1min": float(tokens[-3].replace(",","")), 
-        "load average 5min": float(tokens[-2].replace(",","")), 
-        "load average 15min": float(tokens[-1].replace(",",""))
+        "1min": float(tokens[-3].replace(",","")), 
+        "5min": float(tokens[-2].replace(",","")), 
+        "15min": float(tokens[-1].replace(",",""))
     }
 
 # To use this, install mpstat:
@@ -25,11 +27,11 @@ def processor_utilization():
     j= json.loads(output)
     return j['sysstat']['hosts'][0]['statistics'][0]['cpu-load'][0]
 
-def processor_frequencey():
+def cpuFreqGhz():
     text_file = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", "r")
     data = text_file.read()
     text_file.close()
-    return float(data)
+    return float(data)/1e6
 
 import os
 def getRAMinfo():
@@ -40,45 +42,38 @@ def getRAMinfo():
         line = p.readline()
         if i==2:
             tokens = line.split()
+            used = float(tokens[2])
+            total = float(tokens[1])
+
             return {
-                "Total KB": float(tokens[1]),
-                "used KB": float(tokens[2]),
-                "Free KB": float(tokens[3])
+                "PctUsed": round(used / total * 100, 1),
+                "TotalGB": round(total / 1e6, 2)
             }
 
 # 
 def SDcard():
     # -m means output in megabytes (MB)
     output = subprocess.check_output(['df', '-m', '/'], encoding='utf8')
-    print('The value of output is >>>', output, '<<<')
     lines = output.splitlines()
-    print('The value of lines is >>>', lines, '<<<')
     line = lines[1]
-    print('The value of line is >>>', line, '<<<')
     tokens = line.split()
-    print(tokens)
     return {
-    "Total MB": float(tokens[1].replace(",","")),
-    "Used MB":  float(tokens[2].replace(",","")), 
-    "Available MB": float(tokens[3].replace(",","")), 
-    "Percent used": float(tokens[4].replace("%",""))
+        "PctUsed": float(tokens[4].replace("%","")),
+        "TotalGB": round(float(tokens[1].replace(",","")) / 1000, 1)
     }
 
 def throttled():
-
     GET_THROTTLED_CMD = 'vcgencmd get_throttled'
     MESSAGES = {
-        0: 'Under-voltage',
-        1: 'ARM frequency capped',
-        2: 'Currently throttled',
-        3: 'Soft temperature limit active',
-        16: 'Under-voltage has occurred since last reboot',
-        17: 'Throttling has occurred since last reboot',
-        18: 'ARM frequency capped has occurred since last reboot',
-        19: 'Soft temperature limit has occurred'
+        0: 'Undervolt',
+        1: 'ARMFreqCapped',
+        2: 'Throttled',
+        3: 'SoftTempLimit',
+        16: 'UndervoltSinceBoot',
+        17: 'ThrottledSinceBoot',
+        18: 'ARMFreqCappedSinceBoot',
+        19: 'SoftTempLimitSinceBoot'
     }
-
-    print("Checking for throttling issues since last reboot...")
 
     throttled_output = subprocess.check_output(GET_THROTTLED_CMD, shell=True, encoding='utf8')
     throttled_binary = bin(int(throttled_output.split('=')[1], 0))
@@ -100,12 +95,10 @@ def CPU_clock_rate():
     text_file.close()
     return float(data)
 
-def uptime():
+def uptimeHrs():
     output = subprocess.check_output(['cat', '/proc/uptime'], encoding='utf8')
     tokens = output.split()
-    return {
-        "hours": float(tokens[0])/3600
-    }   
+    return round(float(tokens[0])/3600, 2)
 
 def Timedatectl():
     output = subprocess.check_output(['timedatectl', 'show'], encoding='utf8')
@@ -128,18 +121,19 @@ def backlog_image_count():
 
 def allStats():
     return {
+        "ImageBacklogCnt": backlog_image_count(), 
+        "CpuTempC": cpuTempC(),
+        "GpuTempC": gpuTempC(),
+        "UptimeHrs": uptimeHrs(), 
         "SDcard": SDcard(),
-        "ramInfo": getRAMinfo(), 
-        "processor_frequencey": processor_frequencey(), 
-        "processor_utilization": processor_utilization(), 
-        "uptime": uptime(), 
-        "measure_temperature": measure_temperature(),
-        "throttled": throttled(), 
-        "load_average": load_average(),
-        "Timedatectl": Timedatectl(),
-        "backlog_image_count": backlog_image_count(), 
-        "uptime": uptime()
+        "RAM": getRAMinfo(), 
+        "LoadAvg": load_average(),
+        "CpuUtil": processor_utilization(), 
+        "CpuFreqGhz": cpuFreqGhz(), 
+        "Throttling": throttled(), 
+        "ClockInfo": Timedatectl()
     }
+
 stats = allStats()
 details = json.dumps(stats)
 
@@ -149,12 +143,14 @@ Stat.set_service('RPi status')
 
 errors = []
 
-if stats["SDcard"]["Percent used"] >= 95:
-    errors.append(f'SD card almost full (${stats["SDcard"]["Percent used"]}%)')
+pct_used = stats["SDcard"]["PctUsed"]
+if pct_used >= 95:
+    errors.append(f'SD card almost full ({pct_used}%)')
 
 backlog_image_count_threshold = 50
-if stats["backlog_image_count"] > backlog_image_count_threshold:
-    errors.append(f'${stats["backlog_image_count"]} images in upload backlog (>${backlog_image_count_threshold})')
+backlog_image_count = stats["ImageBacklogCnt"]
+if backlog_image_count > backlog_image_count_threshold:
+    errors.append(f'{backlog_image_count} images in upload backlog (>{backlog_image_count_threshold})')
 
 if errors:
     Stat.down(", ".join(errors), valid_for_secs= 600, details=details, payload=stats)
@@ -181,8 +177,3 @@ def timedatectl():
     tokens = output()
     return tokens
 
-# print(measure_temperature())The
-# print(uptime())
-# print(processor_utilization())
-# print(processor_frequencey())
-# print(getRAMinfo())
