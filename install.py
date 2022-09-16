@@ -3,6 +3,8 @@
 import getpass, os, subprocess
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
+os.chdir(script_dir)
+
 username = getpass.getuser()
 
 def shell_cmd(cmd):
@@ -11,8 +13,8 @@ def shell_cmd(cmd):
 
 def update_crontab(name, line):
     # Read current 
-    completed = subprocess.run(f"crontab -u {username} -l 2>/dev/null", shell=True, capture_output=True, encoding="utf-8")
-    assert(completed.returncode == 0)
+    completed = subprocess.run(f"crontab -u {username} -l", shell=True, capture_output=True, encoding="utf-8")
+    assert(completed.returncode == 0 or "no crontab for" in completed.stderr)
     prev_crontab = completed.stdout.splitlines(keepends=True)
     token = f"AUTOINSTALLED:{name}"
     installme = f"{line} # {token}"
