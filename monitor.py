@@ -119,7 +119,7 @@ def backlog_image_count():
 # Returns in cumulative MB
 def traffic_since_boot_on_interface(interface):
     ret = {}
-    for line in os.popen(f"ifconfig {interface}"):
+    for line in os.popen(f"/usr/sbin/ifconfig {interface}"):
         tokens = line.split()
         if tokens:
             if tokens[0] == "inet":
