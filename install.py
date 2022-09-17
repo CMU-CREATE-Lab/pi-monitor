@@ -41,7 +41,7 @@ shell_cmd(f"{python} -c 'import dateutil' 2>/dev/null || sudo {python} -m pip in
 print("Test")
 shell_cmd(f"{python} monitor.py")
 
-update_crontab("pi-monitor-periodic", f"*/5 * * * * {python} {script_dir}/monitor.py")
+update_crontab("pi-monitor-periodic", f"*/1 * * * * {python} {script_dir}/monitor.py")
 update_crontab("pi-monitor-reboot", f"@reboot {python} {script_dir}/monitor.py --reboot")
 
 

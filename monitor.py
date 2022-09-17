@@ -1,8 +1,8 @@
-from cgi import print_environ
-import statistics
-import subprocess
+import glob, json, os, subprocess, sys
+from utils.utils import *
 
-
+script_dir = os.path.dirname(os.path.realpath(__file__))
+os.chdir(script_dir)
 
 def gpuTempC():
     return float(subprocess.check_output(['/usr/bin/vcgencmd', 'measure_temp'])[5:-3])
@@ -21,7 +21,7 @@ def load_average():
 
 # To use this, install mpstat:
 # sudo apt-get install sysstat
-import json
+
 def processor_utilization():
     output = subprocess.check_output(['mpstat', '-o', 'JSON'], encoding='utf8')
     j= json.loads(output)
@@ -33,7 +33,6 @@ def cpuFreqGhz():
     text_file.close()
     return float(data)/1e6
 
-import os
 def getRAMinfo():
     p = os.popen('free')
     p.readline() # skip header
@@ -109,19 +108,77 @@ def Timedatectl():
             ret[key] = value
     return ret
 
-import glob
-
 def backlog_image_count():
-    backlog_image_filenames = glob.glob("/home/breathecam/breathecam/Code/pi_cam/images/*.jpg")
-    backlog_image_count = len(backlog_image_filenames)
-    return backlog_image_count
+    try:
+        backlog_image_filenames = glob.glob("/home/breathecam/breathecam/Code/pi_cam/images/*.jpg")
+        backlog_image_count = len(backlog_image_filenames)
+        return backlog_image_count
+    except:
+        return None
+
+# Returns in cumulative MB
+def traffic_since_boot_on_interface(interface):
+    ret = {}
+    for line in os.popen(f"ifconfig {interface}"):
+        tokens = line.split()
+        if tokens:
+            if tokens[0] == "inet":
+                ret["IP"] = tokens[1]
+            elif tokens[0] == "RX" and tokens[1] == "packets":
+                ret["RXMB"] = int(tokens[4]) / 1e6
+            elif tokens[0] == "TX" and tokens[1] == "packets":
+                ret["TXMB"] = int(tokens[4]) / 1e6
+    return ret
+    #print(subprocess.check_output("ifconfig eth0", shell=True))
+
+# Returns in cumulative MB
+def traffic_since_boot():
+    ret = {}
+    for interface in ["eth0", "wlan0"]:
+        ret[interface] = traffic_since_boot_on_interface(interface)
+    return ret
+
+# Returns in Mbps
+def traffic_since_last():
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    traffic_file = f"{script_dir}/last_traffic.json"
+    try:
+        last = json.load(open(traffic_file))
+        last_traffic = last["traffic"]
+        last_time = last["time"]
+    except:
+        last_traffic = None
+        pass
+    current_traffic = traffic_since_boot()
+    current_time = time.time()
+    json.dump({"time": current_time, "traffic": current_traffic}, open(traffic_file, "w"))
+    ret = {}
+    if last_traffic:
+        for interface, current in current_traffic.items():
+            if interface in last_traffic:
+                last = last_traffic[interface]
+                try:
+                    ret[interface] = {
+                        "TXmbit/s": round((current["TXMB"] - last["TXMB"]) * 8 / (current_time - last_time), 2),
+                        "RXmbit/s": round((current["RXMB"] - last["RXMB"]) * 8 / (current_time - last_time), 2)
+                    }
+                    if "IP" in current:
+                        ret[interface]["IP"] = current["IP"]
+
+                except:
+                    pass
+    return ret
+
+
+
 
 def allStats():
     return {
         "ImageBacklogCnt": backlog_image_count(), 
-        "UptimeHrs": uptimeHrs(), 
+        "UptimeHrs": uptimeHrs(),
         "CpuTempC": cpuTempC(),
         "GpuTempC": gpuTempC(),
+        "Net": traffic_since_last(),
         "SDcard": SDcard(),
         "RAM": getRAMinfo(), 
         "LoadAvg": load_average(),
@@ -133,8 +190,6 @@ def allStats():
 
 stats = allStats()
 details = json.dumps(stats)
-
-from utils.utils import *
 
 Stat.set_service('RPi status')
 
@@ -164,7 +219,6 @@ def wait_for_timesync():
         waited_secs += 1
     return waited_secs
 
-import sys
 if "--reboot" in sys.argv:
     waited_secs = wait_for_timesync()
     Stat.warning(f"System booted.  Took {waited_secs} seconds for NTP to synchronize")
