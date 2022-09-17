@@ -155,16 +155,14 @@ def traffic_since_last():
     ret = {}
     if last_traffic:
         for interface, current in current_traffic.items():
-            if interface in last_traffic:
+            if interface in last_traffic and "IP" in current:
                 last = last_traffic[interface]
                 try:
                     ret[interface] = {
                         "TXmbit/s": round((current["TXMB"] - last["TXMB"]) * 8 / (current_time - last_time), 2),
-                        "RXmbit/s": round((current["RXMB"] - last["RXMB"]) * 8 / (current_time - last_time), 2)
+                        "RXmbit/s": round((current["RXMB"] - last["RXMB"]) * 8 / (current_time - last_time), 2),
+                        "IP": current["IP"]
                     }
-                    if "IP" in current:
-                        ret[interface]["IP"] = current["IP"]
-
                 except:
                     pass
     return ret
