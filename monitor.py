@@ -134,7 +134,7 @@ def traffic_since_boot_on_interface(interface):
 # Returns in cumulative MB
 def traffic_since_boot():
     ret = {}
-    for interface in ["eth0", "wlan0"]:
+    for interface in ["eth0", "wlan0", "ztksetfmrq"]:
         ret[interface] = traffic_since_boot_on_interface(interface)
     return ret
 
