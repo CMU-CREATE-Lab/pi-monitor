@@ -20,7 +20,7 @@ def load_average():
     }
 
 # To use this, install mpstat:
-# sudo apt-get install sysstat
+# sudo apt-get install sysstatcpu 
 
 def processor_utilization():
     output = subprocess.check_output(['mpstat', '-o', 'JSON'], encoding='utf8')
@@ -32,6 +32,39 @@ def cpuFreqGhz():
     data = text_file.read()
     text_file.close()
     return float(data)/1e6
+
+def osKernel():
+    os = subprocess.check_output(['lsb_release', '-d', '-s'], encoding='utf8').strip()
+    arch = subprocess.check_output(['uname', '-m'], encoding='utf8').strip()
+    kernel = subprocess.check_output(['uname', '-r'], encoding='utf8').strip()
+    kernel += " " + subprocess.check_output(['uname', '-v'], encoding='utf8').strip()
+    return {
+        "Arch": arch,
+        "OS": os,
+        "Kernel": kernel
+    }
+
+def cpuInfo():
+    ret = {}
+    cpuinfo = open("/proc/cpuinfo").read()
+    if (m := re.search(r"Model\s*:\s*(.*)", cpuinfo)):
+        ret["Model"] = m.group(1)
+    if (m := re.search(r"model name\s*:\s*(.*)", cpuinfo)):
+        ret["ModelName"] = m.group(1)
+    if (m := re.search(r"Hardware\s*:\s*(.*)", cpuinfo)):
+        ret["Hardware"] = m.group(1)
+    if (m := re.search(r"Revision\s*:\s*(.*)", cpuinfo)):
+        ret["Revision"] = m.group(1)
+    # Count number of matches for r"processor\s*:\s*(.*)"
+    ret["NumThreads"] = len(re.findall(r"processor\s*:\s*(.*)", cpuinfo))
+    if (m := re.search(r"CPU architecture\s*:\s*(.*)", cpuinfo)):
+        ret["CpuArch"] = m.group(1)
+    if (m := re.search(r"CPU revision\s*:\s*(.*)", cpuinfo)):
+        ret["CpuRevision"] = m.group(1)
+    if (m := re.search(r"Serial\s*:\s*(.*)", cpuinfo)):
+        ret["Serial"] = m.group(1)
+    
+    return ret
 
 def getRAMinfo():
     p = os.popen('free')
@@ -183,6 +216,8 @@ def allStats():
         "CpuUtil": processor_utilization(), 
         "CpuFreqGhz": cpuFreqGhz(), 
         "Throttling": throttled(), 
+        "CpuInfo": cpuInfo(),
+        "OsKernel": osKernel(),
         "ClockInfo": Timedatectl()
     }
 
