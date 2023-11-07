@@ -6,6 +6,7 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 os.chdir(script_dir)
 
 username = getpass.getuser()
+debian_release_version = int(subprocess.check_output("lsb_release -rs", shell=True, encoding="utf-8").strip().lower())
 
 def shell_cmd(cmd):
     print(cmd)
@@ -36,7 +37,12 @@ shell_cmd("mpstat >/dev/null || sudo apt install -y sysstat")
 python = "/usr/bin/python3"
 
 print("Install python dependencies")
-shell_cmd(f"{python} -c 'import dateutil' 2>/dev/null || sudo {python} -m pip install python-dateutil")
+# Note that starting in Debian Bookworm (12), a venv is needed, otherwise Debian refuses to let you install
+# python packages into the system python. For now, we just make use of python packages found via apt.
+if debian_release_version > 11:
+    shell_cmd(f"{python} -c 'import dateutil' 2>/dev/null || sudo apt -y install python3-dateutil")
+else:
+    shell_cmd(f"{python} -c 'import dateutil' 2>/dev/null || sudo {python} -m pip install python-dateutil")
 
 print("Test")
 shell_cmd(f"{python} monitor.py")
