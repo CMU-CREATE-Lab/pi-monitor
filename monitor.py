@@ -1,5 +1,5 @@
-import glob, json, os, subprocess, sys
-from utils.utils import *
+import glob, json, os, re, subprocess, sys, time
+from utils.utils import Stat
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 os.chdir(script_dir)
@@ -47,21 +47,28 @@ def osKernel():
 def cpuInfo():
     ret = {}
     cpuinfo = open("/proc/cpuinfo").read()
-    if (m := re.search(r"Model\s*:\s*(.*)", cpuinfo)):
+    m = re.search(r"Model\s*:\s*(.*)", cpuinfo)
+    if m:
         ret["Model"] = m.group(1)
-    if (m := re.search(r"model name\s*:\s*(.*)", cpuinfo)):
+    m = re.search(r"model name\s*:\s*(.*)", cpuinfo)
+    if m:
         ret["ModelName"] = m.group(1)
-    if (m := re.search(r"Hardware\s*:\s*(.*)", cpuinfo)):
+    m = re.search(r"Hardware\s*:\s*(.*)", cpuinfo)
+    if m:
         ret["Hardware"] = m.group(1)
-    if (m := re.search(r"Revision\s*:\s*(.*)", cpuinfo)):
+    m = re.search(r"Revision\s*:\s*(.*)", cpuinfo)
+    if m:
         ret["Revision"] = m.group(1)
     # Count number of matches for r"processor\s*:\s*(.*)"
     ret["NumThreads"] = len(re.findall(r"processor\s*:\s*(.*)", cpuinfo))
-    if (m := re.search(r"CPU architecture\s*:\s*(.*)", cpuinfo)):
+    m = re.search(r"CPU architecture\s*:\s*(.*)", cpuinfo)
+    if m:
         ret["CpuArch"] = m.group(1)
-    if (m := re.search(r"CPU revision\s*:\s*(.*)", cpuinfo)):
+    m = re.search(r"CPU revision\s*:\s*(.*)", cpuinfo)
+    if m:
         ret["CpuRevision"] = m.group(1)
-    if (m := re.search(r"Serial\s*:\s*(.*)", cpuinfo)):
+    m = re.search(r"Serial\s*:\s*(.*)", cpuinfo)
+    if m:
         ret["Serial"] = m.group(1)
     
     return ret
@@ -149,10 +156,17 @@ def backlog_image_count():
     except:
         return None
 
+def ifconfig_path():
+    for ifconfig_dir in ["/usr/sbin", "/sbin"]:
+        ifconfig_path = f"{ifconfig_dir}/ifconfig"
+        if os.path.exists(ifconfig_path):
+            return ifconfig_path
+    raise Exception("ifconfig not found")
+
 # Returns in cumulative MB
 def traffic_since_boot_on_interface(interface):
     ret = {}
-    for line in os.popen(f"/usr/sbin/ifconfig {interface}"):
+    for line in os.popen(f"{ifconfig_path()} {interface}"):
         tokens = line.split()
         if tokens:
             if tokens[0] == "inet":
