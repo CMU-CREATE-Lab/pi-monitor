@@ -136,18 +136,6 @@ def uptimeHrs():
     tokens = output.split()
     return round(float(tokens[0])/3600, 2)
 
-def Timedatectl():
-    output = subprocess.check_output(['timedatectl', 'show'], encoding='utf8')
-    output += subprocess.check_output(['timedatectl', 'show-timesync'], encoding='utf8')
-    lines = output.split('\n')
-    # Build a dictionary from a=b from lines
-    ret = {}
-    for line in lines:
-        if line:
-            [key, value] = line.split('=', 1)
-            ret[key] = value
-    return ret
-
 def backlog_image_count():
     try:
         backlog_image_filenames = glob.glob("/home/breathecam/breathecam/Code/pi_cam/images/*.jpg")
@@ -214,7 +202,9 @@ def traffic_since_last():
                     pass
     return ret
 
-
+def ntpstat():
+    output = subprocess.check_output(['ntpstat'], encoding='utf8')
+    return output
 
 
 def allStats():
@@ -232,7 +222,7 @@ def allStats():
         "Throttling": throttled(), 
         "CpuInfo": cpuInfo(),
         "OsKernel": osKernel(),
-        "ClockInfo": Timedatectl()
+        "ClockInfo": ntpstat()
     }
 
 stats = allStats()
@@ -257,10 +247,21 @@ else:
     Stat.up("System is working", valid_for_secs = 600, details=details, payload=stats)
 
 
+def is_ntp_synchronized():
+    try:
+        result = subprocess.run(["ntpstat"], capture_output=True, text=True)
+        return result.returncode == 0  # ntpstat returns 0 when synchronized
+    except FileNotFoundError:
+        print("ntpstat not found. Ensure it is installed.")
+        return False
+    except Exception as e:
+        print(f"Error checking NTP synchronization: {e}")
+        return False
+
 def wait_for_timesync():
     # Wait until the system clock is synchronized, and return how long it took
     waited_secs = 0
-    while not os.path.exists("/run/systemd/timesync/synchronized"):
+    while not is_ntp_synchronized():
         print("waiting for time sync")
         time.sleep(1.0)
         waited_secs += 1
@@ -269,9 +270,3 @@ def wait_for_timesync():
 if "--reboot" in sys.argv:
     waited_secs = wait_for_timesync()
     Stat.warning(f"System booted.  Took {waited_secs} seconds for NTP to synchronize")
-
-def timedatectl():
-    output = subprocess.check_output(['timedatectl', 'timesync-status'], encoding='utf8')
-    tokens = output()
-    return tokens
-

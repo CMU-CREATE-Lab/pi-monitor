@@ -44,10 +44,8 @@ if debian_release_version > 11:
 else:
     shell_cmd(f"{python} -c 'import dateutil' 2>/dev/null || sudo {python} -m pip install python-dateutil")
 
-print("Test")
-shell_cmd(f"{python} monitor.py")
+print(f"Run {python} monitor.py to test.")
+#shell_cmd(f"{python} monitor.py")
 
 update_crontab("pi-monitor-periodic", f"*/1 * * * * {python} {script_dir}/monitor.py")
 update_crontab("pi-monitor-reboot", f"@reboot {python} {script_dir}/monitor.py --reboot")
-
-
