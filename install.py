@@ -48,11 +48,14 @@ def update_crontab(name, line):
     new_crontab_content = ''.join(other_lines) + installme + "\n"
     subprocess.check_output(f"crontab -u {username} -", shell=True, input=new_crontab_content, encoding="utf-8")
 
+# On amd64, use --no-upgrade to avoid pulling in unrelated upgrades (e.g., kernel)
+apt_flags = "-y" if IS_PI else "-y --no-upgrade"
+
 print("Install apt package dependencies")
-shell_cmd("mpstat >/dev/null || sudo apt install -y sysstat")
-shell_cmd("ifconfig >/dev/null 2>&1 || sudo apt install -y net-tools")
+shell_cmd(f"mpstat >/dev/null || sudo apt install {apt_flags} sysstat")
+shell_cmd(f"ifconfig >/dev/null 2>&1 || sudo apt install {apt_flags} net-tools")
 if IS_PI:
-    shell_cmd("ntpstat >/dev/null 2>&1 || sudo apt install -y ntpstat")
+    shell_cmd(f"ntpstat >/dev/null 2>&1 || sudo apt install {apt_flags} ntpstat")
 
 python = "/usr/bin/python3"
 
@@ -61,7 +64,7 @@ print("Install python dependencies")
 # the system refuses to let you install python packages into the system python.
 # For now, we just make use of python packages found via apt.
 if debian_release_version >= 12:
-    shell_cmd(f"{python} -c 'import dateutil' 2>/dev/null || sudo apt -y install python3-dateutil")
+    shell_cmd(f"{python} -c 'import dateutil' 2>/dev/null || sudo apt install {apt_flags} python3-dateutil")
 else:
     shell_cmd(f"{python} -c 'import dateutil' 2>/dev/null || sudo {python} -m pip install python-dateutil")
 
