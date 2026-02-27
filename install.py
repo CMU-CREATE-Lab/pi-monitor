@@ -50,6 +50,8 @@ def update_crontab(name, line):
 
 # On amd64, use --no-upgrade to avoid pulling in unrelated upgrades (e.g., kernel)
 apt_flags = "-y" if IS_PI else "-y --no-upgrade"
+# Suppress interactive dialogs (e.g., needrestart) that hang over SSH
+os.environ["DEBIAN_FRONTEND"] = "noninteractive"
 
 print("Install apt package dependencies")
 shell_cmd(f"mpstat >/dev/null || sudo apt install {apt_flags} sysstat")
