@@ -1,8 +1,12 @@
 # Introduction
 
-This is the pi-monitor project, which will reports many stats from your Raspberry Pi to stat.createlab.org.
+Server monitor that reports system stats to stat.createlab.org.  Supports Raspberry Pi and amd64 Ubuntu systems.
 
-# Installation
+# Remote one-liner install via SSH
+
+    ssh <hostname> 'git clone --recursive https://github.com/CMU-CREATE-Lab/pi-monitor.git ~/server-monitor && /usr/bin/python3 ~/server-monitor/install.py'
+
+# Local installation
 
 Make sure you have a recent version of python3 (>=3.6)
 
@@ -13,14 +17,14 @@ Make sure you have a recent version of python3 (>=3.6)
 Clone into your homedir, and install.  Okay to do this either as a standard user, or as root.  This will handle dependencies and plug into the current user's crontab
 
     cd ~
-    git clone --recursive https://github.com/CMU-CREATE-Lab/pi-monitor.git
-    cd pi-monitor
+    git clone --recursive https://github.com/CMU-CREATE-Lab/pi-monitor.git server-monitor
+    cd server-monitor
     # if needed, hand edit install.py to change path to python3 if /usr/bin/python3 isn't what you want to use
     ./install.py
 
 # Update to new version remotely via ssh
 
-    ssh <hostname> pi-monitor/update.py
+    ssh <hostname> server-monitor/update.py
 
 # Reported data
 

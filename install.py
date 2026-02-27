@@ -1,19 +1,36 @@
 #!/usr/bin/python3
 
-import getpass, os, subprocess
+import getpass, os, re, subprocess
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 os.chdir(script_dir)
 
 username = getpass.getuser()
-debian_release_version = int(subprocess.check_output("lsb_release -rs", shell=True, encoding="utf-8").strip().lower())
+debian_release_version = float(subprocess.check_output("lsb_release -rs", shell=True, encoding="utf-8").strip())
+
+def is_raspberry_pi():
+    try:
+        with open("/sys/firmware/devicetree/base/model") as f:
+            if "Raspberry Pi" in f.read():
+                return True
+    except:
+        pass
+    try:
+        cpuinfo = open("/proc/cpuinfo").read()
+        if re.search(r"Hardware\s*:\s*BCM", cpuinfo):
+            return True
+    except:
+        pass
+    return False
+
+IS_PI = is_raspberry_pi()
 
 def shell_cmd(cmd):
     print(cmd)
     print(subprocess.check_output(cmd, shell=True, encoding="utf-8"))
 
 def update_crontab(name, line):
-    # Read current 
+    # Read current
     completed = subprocess.run(f"crontab -u {username} -l", shell=True, capture_output=True, encoding="utf-8")
     assert(completed.returncode == 0 or "no crontab for" in completed.stderr)
     prev_crontab = completed.stdout.splitlines(keepends=True)
@@ -33,13 +50,17 @@ def update_crontab(name, line):
 
 print("Install apt package dependencies")
 shell_cmd("mpstat >/dev/null || sudo apt install -y sysstat")
+shell_cmd("ifconfig >/dev/null 2>&1 || sudo apt install -y net-tools")
+if IS_PI:
+    shell_cmd("ntpstat >/dev/null 2>&1 || sudo apt install -y ntpstat")
 
 python = "/usr/bin/python3"
 
 print("Install python dependencies")
-# Note that starting in Debian Bookworm (12), a venv is needed, otherwise Debian refuses to let you install
-# python packages into the system python. For now, we just make use of python packages found via apt.
-if debian_release_version > 11:
+# Note that starting in Debian Bookworm (12) / Ubuntu 24.04+, a venv is needed, otherwise
+# the system refuses to let you install python packages into the system python.
+# For now, we just make use of python packages found via apt.
+if debian_release_version >= 12:
     shell_cmd(f"{python} -c 'import dateutil' 2>/dev/null || sudo apt -y install python3-dateutil")
 else:
     shell_cmd(f"{python} -c 'import dateutil' 2>/dev/null || sudo {python} -m pip install python-dateutil")
@@ -47,5 +68,23 @@ else:
 print(f"Run {python} monitor.py to test.")
 #shell_cmd(f"{python} monitor.py")
 
-update_crontab("pi-monitor-periodic", f"*/1 * * * * {python} {script_dir}/monitor.py")
-update_crontab("pi-monitor-reboot", f"@reboot {python} {script_dir}/monitor.py --reboot")
+def remove_crontab_entry(name):
+    completed = subprocess.run(f"crontab -u {username} -l", shell=True, capture_output=True, encoding="utf-8")
+    if completed.returncode != 0:
+        return
+    prev_crontab = completed.stdout.splitlines(keepends=True)
+    token = f"AUTOINSTALLED:{name}"
+    old_lines = [line for line in prev_crontab if token in line]
+    if not old_lines:
+        return
+    other_lines = [line for line in prev_crontab if token not in line]
+    print(f"{name}: removing old entry from {username} crontab")
+    new_crontab_content = ''.join(other_lines)
+    subprocess.check_output(f"crontab -u {username} -", shell=True, input=new_crontab_content, encoding="utf-8")
+
+# Clean up old crontab entries from before rename
+remove_crontab_entry("pi-monitor-periodic")
+remove_crontab_entry("pi-monitor-reboot")
+
+update_crontab("server-monitor-periodic", f"*/1 * * * * {python} {script_dir}/monitor.py")
+update_crontab("server-monitor-reboot", f"@reboot {python} {script_dir}/monitor.py --reboot")

@@ -4,11 +4,31 @@ from utils.utils import Stat
 script_dir = os.path.dirname(os.path.realpath(__file__))
 os.chdir(script_dir)
 
+def is_raspberry_pi():
+    try:
+        with open("/sys/firmware/devicetree/base/model") as f:
+            if "Raspberry Pi" in f.read():
+                return True
+    except:
+        pass
+    try:
+        cpuinfo = open("/proc/cpuinfo").read()
+        if re.search(r"Hardware\s*:\s*BCM", cpuinfo):
+            return True
+    except:
+        pass
+    return False
+
+IS_PI = is_raspberry_pi()
+
 def gpuTempC():
     return float(subprocess.check_output(['/usr/bin/vcgencmd', 'measure_temp'])[5:-3])
 
 def cpuTempC():
-    return round(float(open("/sys/class/thermal/thermal_zone0/temp").read()) / 1000, 1)
+    try:
+        return round(float(open("/sys/class/thermal/thermal_zone0/temp").read()) / 1000, 1)
+    except (FileNotFoundError, ValueError):
+        return None
 
 def load_average():
     output = subprocess.check_output(['uptime'], encoding='utf8')
@@ -28,10 +48,24 @@ def processor_utilization():
     return j['sysstat']['hosts'][0]['statistics'][0]['cpu-load'][0]
 
 def cpuFreqGhz():
-    text_file = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", "r")
-    data = text_file.read()
-    text_file.close()
-    return float(data)/1e6
+    freq = None
+    try:
+        with open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq") as f:
+            freq = round(float(f.read()) / 1e6, 3)
+    except FileNotFoundError:
+        # Fallback for systems without cpufreq scaling (e.g., amd64 VMs)
+        cpuinfo = open("/proc/cpuinfo").read()
+        m = re.search(r"cpu MHz\s*:\s*([\d.]+)", cpuinfo)
+        if m:
+            freq = round(float(m.group(1)) / 1000, 3)
+    return freq
+
+def cpuMaxFreqGhz():
+    try:
+        with open("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq") as f:
+            return round(float(f.read()) / 1e6, 3)
+    except FileNotFoundError:
+        return None
 
 def osKernel():
     os = subprocess.check_output(['lsb_release', '-d', '-s'], encoding='utf8').strip()
@@ -98,6 +132,33 @@ def SDcard():
         "TotalGB": round(float(tokens[1].replace(",","")) / 1000, 1)
     }
 
+def local_filesystems():
+    exclude_types = {'tmpfs', 'devtmpfs', 'squashfs', 'overlay', 'efivarfs'}
+    local_types = {'zfs'}
+    result = {}
+    output = subprocess.check_output(['df', '-m', '-T'], encoding='utf8')
+    for line in output.splitlines()[1:]:
+        tokens = line.split()
+        if len(tokens) >= 7:
+            device = tokens[0]
+            fstype = tokens[1]
+            total_mb = tokens[2]
+            pct_used = tokens[5]
+            mount = tokens[6]
+            if fstype in exclude_types:
+                continue
+            if not device.startswith('/dev/') and fstype not in local_types:
+                continue
+            if mount.startswith('/snap/'):
+                continue
+            result[mount] = {
+                "PctUsed": float(pct_used.replace("%", "")),
+                "TotalGB": round(float(total_mb.replace(",", "")) / 1000, 1),
+                "Device": device,
+                "FsType": fstype
+            }
+    return result
+
 def throttled():
     GET_THROTTLED_CMD = 'vcgencmd get_throttled'
     MESSAGES = {
@@ -163,13 +224,31 @@ def traffic_since_boot_on_interface(interface):
                 ret["RXMB"] = int(tokens[4]) / 1e6
             elif tokens[0] == "TX" and tokens[1] == "packets":
                 ret["TXMB"] = int(tokens[4]) / 1e6
+    if not IS_PI:
+        try:
+            with open(f"/sys/class/net/{interface}/speed") as f:
+                speed = int(f.read().strip())
+                if speed > 0:
+                    ret["LinkSpeedMbps"] = speed
+        except:
+            pass
     return ret
-    #print(subprocess.check_output("ifconfig eth0", shell=True))
+
+def get_network_interfaces():
+    try:
+        return [iface for iface in os.listdir("/sys/class/net")
+                if iface != "lo" and os.path.exists(f"/sys/class/net/{iface}/device")]
+    except:
+        return ["eth0"]
 
 # Returns in cumulative MB
 def traffic_since_boot():
     ret = {}
-    for interface in ["eth0", "wlan0", "ztksetfmrq"]:
+    if IS_PI:
+        interfaces = ["eth0", "wlan0", "ztksetfmrq"]
+    else:
+        interfaces = get_network_interfaces()
+    for interface in interfaces:
         ret[interface] = traffic_since_boot_on_interface(interface)
     return ret
 
@@ -193,11 +272,14 @@ def traffic_since_last():
             if interface in last_traffic and "IP" in current:
                 last = last_traffic[interface]
                 try:
-                    ret[interface] = {
+                    iface_stats = {
                         "TXmbit/s": round((current["TXMB"] - last["TXMB"]) * 8 / (current_time - last_time), 2),
                         "RXmbit/s": round((current["RXMB"] - last["RXMB"]) * 8 / (current_time - last_time), 2),
                         "IP": current["IP"]
                     }
+                    if "LinkSpeedMbps" in current:
+                        iface_stats["LinkSpeedMbps"] = current["LinkSpeedMbps"]
+                    ret[interface] = iface_stats
                 except:
                     pass
     return ret
@@ -208,38 +290,50 @@ def ntpstat():
 
 
 def allStats():
-    return {
-        "ImageBacklogCnt": backlog_image_count(), 
+    stats = {
         "UptimeHrs": uptimeHrs(),
         "CpuTempC": cpuTempC(),
-        "GpuTempC": gpuTempC(),
         "Net": traffic_since_last(),
-        "SDcard": SDcard(),
-        "RAM": getRAMinfo(), 
+        "SDcard" if IS_PI else "Filesystems": SDcard() if IS_PI else local_filesystems(),
+        "RAM": getRAMinfo(),
         "LoadAvg": load_average(),
-        "CpuUtil": processor_utilization(), 
-        "CpuFreqGhz": cpuFreqGhz(), 
-        "Throttling": throttled(), 
+        "CpuUtil": processor_utilization(),
+        "CpuFreqGhz": cpuFreqGhz(),
+        "CpuMaxFreqGhz": cpuMaxFreqGhz(),
         "CpuInfo": cpuInfo(),
-        "OsKernel": osKernel(),
-        "ClockInfo": ntpstat()
+        "OsKernel": osKernel()
     }
+    if IS_PI:
+        stats["GpuTempC"] = gpuTempC()
+        stats["Throttling"] = throttled()
+        stats["ImageBacklogCnt"] = backlog_image_count()
+        stats["ClockInfo"] = ntpstat()
+    return stats
 
 stats = allStats()
 details = json.dumps(stats)
 
-Stat.set_service('RPi status')
+if "--pretty" in sys.argv:
+    print(json.dumps(stats, indent=2))
+
+Stat.set_service('RPi status' if IS_PI else 'Server status')
 
 errors = []
 
-pct_used = stats["SDcard"]["PctUsed"]
-if pct_used >= 95:
-    errors.append(f'SD card almost full ({pct_used}%)')
+if IS_PI:
+    pct_used = stats["SDcard"]["PctUsed"]
+    if pct_used >= 95:
+        errors.append(f'SD card almost full ({pct_used}%)')
+else:
+    for mount, fs in stats["Filesystems"].items():
+        if fs["PctUsed"] >= 95:
+            errors.append(f'{mount} almost full ({fs["PctUsed"]}%)')
 
-backlog_image_count_threshold = 50
-backlog_image_count = stats["ImageBacklogCnt"]
-if backlog_image_count > backlog_image_count_threshold:
-    errors.append(f'{backlog_image_count} images in upload backlog (>{backlog_image_count_threshold})')
+if IS_PI:
+    backlog_image_count_threshold = 50
+    backlog_image_count = stats["ImageBacklogCnt"]
+    if backlog_image_count > backlog_image_count_threshold:
+        errors.append(f'{backlog_image_count} images in upload backlog (>{backlog_image_count_threshold})')
 
 if errors:
     Stat.down(", ".join(errors), valid_for_secs= 600, details=details, payload=stats)
