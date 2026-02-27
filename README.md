@@ -4,7 +4,7 @@ Server monitor that reports system stats to stat.createlab.org.  Supports Raspbe
 
 # Remote one-liner install via SSH
 
-    ssh <hostname> 'git clone --recursive https://github.com/CMU-CREATE-Lab/pi-monitor.git ~/server-monitor && /usr/bin/python3 ~/server-monitor/install.py'
+    ssh -t <hostname> 'git clone --recursive https://github.com/CMU-CREATE-Lab/pi-monitor.git ~/server-monitor && /usr/bin/python3 ~/server-monitor/install.py'
 
 # Local installation
 
